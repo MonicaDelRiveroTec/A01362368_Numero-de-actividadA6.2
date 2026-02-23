@@ -1,45 +1,37 @@
 """Module for Reservation class with file-based persistence."""
 
-import json
 import os
-from datetime import date
+from models.persistence import load_data, save_data
+from models.hotel import Hotel
 
 DATA_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'reservations.json')
 
 
-def _load_reservations():
-    """Load reservations from JSON file. Returns empty dict on error."""
-    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
-    if not os.path.exists(DATA_FILE):
-        return {}
-    try:
-        with open(DATA_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
-        print(f"[ERROR] Failed to load reservations data: {e}")
-        return {}
+class DateRange:
+    """Represents a check-in and check-out date pair."""
 
+    def __init__(self, check_in, check_out):
+        self.check_in = str(check_in)
+        self.check_out = str(check_out)
 
-def _save_reservations(data):
-    """Persist reservations dict to JSON file."""
-    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
-    try:
-        with open(DATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
-    except IOError as e:
-        print(f"[ERROR] Failed to save reservations data: {e}")
+    def __repr__(self):
+        """Return a readable string representation of the date range."""
+        return f"DateRange(check_in={self.check_in}, check_out={self.check_out})"
+
+    def to_tuple(self):
+        """Return check-in and check-out as a tuple."""
+        return (self.check_in, self.check_out)
 
 
 class Reservation:
     """Links a Customer to a Hotel for a date range."""
 
-    def __init__(self, reservation_id, customer_id, hotel_id,
-                 check_in, check_out):
+    def __init__(self, reservation_id, customer_id, hotel_id, date_range):
         self.reservation_id = str(reservation_id)
         self.customer_id = str(customer_id)
         self.hotel_id = str(hotel_id)
-        self.check_in = str(check_in)
-        self.check_out = str(check_out)
+        self.check_in = date_range.check_in
+        self.check_out = date_range.check_out
         self.status = 'active'
 
     def to_dict(self):
@@ -56,51 +48,38 @@ class Reservation:
     @classmethod
     def from_dict(cls, data):
         """Deserialize reservation from dictionary."""
+        date_range = DateRange(data['check_in'], data['check_out'])
         res = cls(
             data['reservation_id'],
             data['customer_id'],
             data['hotel_id'],
-            data['check_in'],
-            data['check_out'],
+            date_range,
         )
         res.status = data.get('status', 'active')
         return res
 
     @staticmethod
     def create(reservation_id, customer_id, hotel_id, check_in, check_out):
-        """
-        Create a reservation and update hotel room availability.
-
-        Imports Hotel inline to avoid circular dependency issues.
-        """
-        from models.hotel import Hotel  # noqa: PLC0415
-
-        reservations = _load_reservations()
+        """Create a reservation and update hotel room availability."""
+        reservations = load_data(DATA_FILE)
         reservation_id = str(reservation_id)
         if reservation_id in reservations:
             print(f"[ERROR] Reservation '{reservation_id}' already exists.")
             return None
 
-        success = Hotel.reserve_room(hotel_id, reservation_id)
-        if not success:
+        if not Hotel.reserve_room(hotel_id, reservation_id):
             return None
 
-        res = Reservation(reservation_id, customer_id, hotel_id,
-                          check_in, check_out)
+        date_range = DateRange(check_in, check_out)
+        res = Reservation(reservation_id, customer_id, hotel_id, date_range)
         reservations[reservation_id] = res.to_dict()
-        _save_reservations(reservations)
+        save_data(DATA_FILE, reservations)
         return res
 
     @staticmethod
     def cancel(reservation_id):
-        """
-        Cancel a reservation and restore hotel room availability.
-
-        Imports Hotel inline to avoid circular dependency issues.
-        """
-        from models.hotel import Hotel  # noqa: PLC0415
-
-        reservations = _load_reservations()
+        """Cancel a reservation and restore hotel room availability."""
+        reservations = load_data(DATA_FILE)
         reservation_id = str(reservation_id)
         if reservation_id not in reservations:
             print(f"[ERROR] Reservation '{reservation_id}' not found.")
@@ -113,6 +92,5 @@ class Reservation:
 
         Hotel.cancel_room(data['hotel_id'], reservation_id)
         reservations[reservation_id]['status'] = 'cancelled'
-        _save_reservations(reservations)
+        save_data(DATA_FILE, reservations)
         return True
-    

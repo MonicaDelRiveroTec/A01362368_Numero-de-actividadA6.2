@@ -1,32 +1,9 @@
 """Module for Customer class with file-based persistence."""
 
-import json
 import os
+from models.persistence import load_data, save_data
 
 DATA_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'customers.json')
-
-
-def _load_customers():
-    """Load customers from JSON file. Returns empty dict on error."""
-    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
-    if not os.path.exists(DATA_FILE):
-        return {}
-    try:
-        with open(DATA_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
-        print(f"[ERROR] Failed to load customers data: {e}")
-        return {}
-
-
-def _save_customers(data):
-    """Persist customers dict to JSON file."""
-    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
-    try:
-        with open(DATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
-    except IOError as e:
-        print(f"[ERROR] Failed to save customers data: {e}")
 
 
 class Customer:
@@ -60,46 +37,46 @@ class Customer:
     @staticmethod
     def create(customer_id, name, email, phone):
         """Create and persist a new customer."""
-        customers = _load_customers()
+        customers = load_data(DATA_FILE)
         customer_id = str(customer_id)
         if customer_id in customers:
             print(f"[ERROR] Customer '{customer_id}' already exists.")
             return None
         customer = Customer(customer_id, name, email, phone)
         customers[customer_id] = customer.to_dict()
-        _save_customers(customers)
+        save_data(DATA_FILE, customers)
         return customer
 
     @staticmethod
     def delete(customer_id):
         """Delete a customer by ID."""
-        customers = _load_customers()
+        customers = load_data(DATA_FILE)
         customer_id = str(customer_id)
         if customer_id not in customers:
             print(f"[ERROR] Customer '{customer_id}' not found.")
             return False
         del customers[customer_id]
-        _save_customers(customers)
+        save_data(DATA_FILE, customers)
         return True
 
     @staticmethod
     def display(customer_id):
         """Print customer information to console."""
-        customers = _load_customers()
+        customers = load_data(DATA_FILE)
         customer_id = str(customer_id)
         if customer_id not in customers:
             print(f"[ERROR] Customer '{customer_id}' not found.")
             return None
         data = customers[customer_id]
         print("--- Customer ---")
-        for k, v in data.items():
-            print(f"  {k}: {v}")
+        for key, value in data.items():
+            print(f"  {key}: {value}")
         return Customer.from_dict(data)
 
     @staticmethod
     def modify(customer_id, **kwargs):
         """Modify editable fields of an existing customer."""
-        customers = _load_customers()
+        customers = load_data(DATA_FILE)
         customer_id = str(customer_id)
         if customer_id not in customers:
             print(f"[ERROR] Customer '{customer_id}' not found.")
@@ -110,5 +87,5 @@ class Customer:
                 customers[customer_id][key] = value
             else:
                 print(f"[WARN] Field '{key}' is not modifiable or unknown.")
-        _save_customers(customers)
+        save_data(DATA_FILE, customers)
         return True
